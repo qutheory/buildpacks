@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+BIN_DIR=$(cd $(dirname $0); pwd)
+ROOT_DIR=$(dirname $BIN_DIR)
+
+layersdir=$1
+env_dir="$2/env"
+
+DEFAULT_SWIFT_VERSION="4.2.4"
+
+CLANG_VERSION=7.0.1
+
+if [[ -z "${SWIFT_BUILD_CONFIGURATION}" ]]; then
+    SWIFT_BUILD_CONFIGURATION="release"
+else
+    SWIFT_BUILD_CONFIGURATION="$SWIFT_BUILD_CONFIGURATION"
+fi
+
+if [[ -z "${SWIFT_BUILD_FLAGS}" ]]; then
+    SWIFT_BUILD_FLAGS=""
+else
+    SWIFT_BUILD_FLAGS="$SWIFT_BUILD_FLAGS"
+fi
+
+if compgen -G "$env_dir/*" > /dev/null; then
+  for var in "$env_dir"/*; do
+    declare "$(basename "$var")=$(<"$var")"
+  done
+fi
+
+source "/etc/lsb-release"
+source "$BIN_DIR/utils"
+source "$BIN_DIR/steps/clang"
+source "$BIN_DIR/steps/swiftenv"
+
+source "$BIN_DIR/steps/hooks/pre_compile"
+source "$BIN_DIR/steps/ssh"
+source "$BIN_DIR/steps/swift-build"
+source "$BIN_DIR/steps/swift-install"
+
+echo "export PATH=$PATH:$PWD/.swift-bin" >> "$PWD/.profile"
+echo "export LD_LIBRARY_PATH=$PATH:$PWD/.swift-lib" >> "$PWD/.profile"
+
+if [[ -z "${EXECUTABLE}" ]]; then
+    echo "export EXEC_COMMAND=\"Run serve --hostname 0.0.0.0 --port 8080\"" >> "$PWD/.profile"
+else
+    echo "export EXEC_COMMAND=\"$EXEC_COMMAND\"" >> "$PWD/.profile"
+fi
+
+source "$BIN_DIR/steps/hooks/post_compile"
+
+echo 'processes = [{ type = "web", command = "Run serve --hostname 0.0.0.0 --port 8080"}]' > "$layersdir/launch.toml"
